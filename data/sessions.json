@@ -1,0 +1,45 @@
+{
+  "session_1756589801009_8do90peb1": {
+    "userId": "demo-user",
+    "streamId": "2",
+    "trxId": "03C6f7805dc1e388",
+    "amount": 1000,
+    "status": "pending",
+    "expiresAt": 1756597001009
+  },
+  "session_1756589813147_jsn2bbkym": {
+    "userId": "demo-user",
+    "streamId": "2",
+    "trxId": "UPSTREAM-1756589813147-s8z4xtjdu",
+    "amount": 1000,
+    "status": "paid",
+    "expiresAt": 1756597013147,
+    "paidAt": 1756589813147
+  },
+  "session_1756589941983_pzc3tv69o": {
+    "userId": "demo-user",
+    "streamId": "4",
+    "trxId": "UPSTREAM-1756589941983-1rntlw19z",
+    "amount": 1000,
+    "status": "paid",
+    "expiresAt": 1756597141983,
+    "paidAt": 1756589941983
+  },
+  "demo-user": {
+    "userId": "demo-user",
+    "streamId": "2",
+    "trxId": "UPSTREAM-1756590752221-tn4t69ezp",
+    "amount": 1000,
+    "status": "paid",
+    "expiresAt": 1756597952221,
+    "paidAt": 1756590752222
+  },
+  "user_1756590594119_7mvt1ibfu": {
+    "userId": "user_1756590594119_7mvt1ibfu",
+    "streamId": "2",
+    "trxId": "UPSTREAM-1756590709630-0cpaym4lx",
+    "amount": 1000,
+    "status": "pending",
+    "expiresAt": 1756597909630
+  }
+}
