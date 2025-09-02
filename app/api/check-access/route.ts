@@ -76,8 +76,7 @@ export async function POST(request: NextRequest) {
           payment: currentPayment ? {
             trxId: currentPayment.trx_id,
             amount: currentPayment.amount,
-            paidAt: currentPayment.paid_at,
-            expiresAt: currentPayment.expires_at,
+            expiresAt: new Date(currentPayment.expired_at * 1000).toISOString(),
             streamTitle: currentPayment.stream_title
           } : null,
           message: 'User memiliki akses premium untuk stream ini'

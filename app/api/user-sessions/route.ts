@@ -18,11 +18,9 @@ export async function GET(request: NextRequest) {
       userId: payment.user_id,
       amount: payment.amount,
       status: payment.status,
-      paidAt: payment.paid_at,
-      expiresAt: payment.expires_at,
+      expiresAt: new Date(payment.expired_at * 1000).toISOString(),
       created_at: payment.created_at,
-      updated_at: payment.updated_at,
-      remainingTime: Math.max(0, new Date(payment.expires_at).getTime() - Date.now())
+      remainingTime: Math.max(0, (payment.expired_at * 1000) - Date.now())
     }))
 
     return NextResponse.json({
@@ -70,10 +68,9 @@ export async function POST(request: NextRequest) {
             trxId: streamPayment.trx_id,
             amount: streamPayment.amount,
             status: streamPayment.status,
-            paidAt: streamPayment.paid_at,
-            expiresAt: streamPayment.expires_at,
+            expiresAt: new Date(streamPayment.expired_at * 1000).toISOString(),
             streamTitle: streamPayment.stream_title,
-            remainingTime: Math.max(0, new Date(streamPayment.expires_at).getTime() - Date.now())
+            remainingTime: Math.max(0, (streamPayment.expired_at * 1000) - Date.now())
           }
         }
       })

@@ -6,6 +6,7 @@ import { Stream } from '@/lib/database'
 import Link from 'next/link'
 import { useUserID } from '@/components/UserIDProvider'
 import QRCodeDisplay from '@/components/QRCodeDisplay'
+import PaymentWarningPopup from '@/components/PaymentWarningPopup'
 
 function PaymentPageContent() {
   const searchParams = useSearchParams()
@@ -14,14 +15,20 @@ function PaymentPageContent() {
   const [stream, setStream] = useState<Stream | null>(null)
   const [loading, setLoading] = useState(true)
   const [qrCode, setQrCode] = useState<string>('')
+  const [currentTrxId, setCurrentTrxId] = useState<string>('')
   const [paymentStatus, setPaymentStatus] = useState<'pending' | 'paid' | 'expired'>('pending')
   const [timeLeft, setTimeLeft] = useState(300) // 5 menit
   const [alreadyHasAccess, setAlreadyHasAccess] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
+  const [showWarningPopup, setShowWarningPopup] = useState(false)
   
   const { userId, isLoading: userIdLoading } = useUserID()
 
   useEffect(() => {
+    // Show warning popup immediately when component mounts
+    console.log('🔄 Component mounted, setting showWarningPopup to true')
+    setShowWarningPopup(true)
+    
     if (streamId) {
       fetchStream()
       startPaymentTimer()
@@ -55,6 +62,11 @@ function PaymentPageContent() {
     }
   }, [timeLeft, paymentStatus, alreadyHasAccess])
 
+  const handleWarningClose = () => {
+    console.log('🔄 Closing warning popup')
+    setShowWarningPopup(false)
+  }
+
   const fetchStream = async () => {
     try {
       const response = await fetch(`/api/streams/${streamId}`)
@@ -77,6 +89,9 @@ function PaymentPageContent() {
 
   const generateQRIS = async () => {
     try {
+      // Reset current transaction ID when generating new QRIS
+      setCurrentTrxId('')
+      
       const requestBody = {
         streamId: streamId,
         amount: stream?.price || 0,
@@ -94,8 +109,9 @@ function PaymentPageContent() {
       if (response.ok) {
         const data = await response.json()
         setQrCode(data.data.qrCode)
-        // Store trxId for payment status checking
-        localStorage.setItem('currentTrxId', data.data.trxId)
+        // Store trxId in state for payment status checking
+        setCurrentTrxId(data.data.trxId)
+        console.log('🔄 Generated QRIS with trx_id:', data.data.trxId)
         setErrorMessage('')
       } else {
         const errorData = await response.json()
@@ -125,11 +141,10 @@ function PaymentPageContent() {
 
   const checkPaymentStatus = async () => {
     try {
-      const trxId = localStorage.getItem('currentTrxId')
-      
-      if (!trxId || !userId) return
+      if (!currentTrxId || !userId) return
 
-      const response = await fetch(`/api/payment-callback?trxId=${trxId}&userId=${userId}&streamId=${streamId}`)
+      console.log('🔍 Checking payment status for trx_id:', currentTrxId)
+      const response = await fetch(`/api/payment-callback?trxId=${currentTrxId}&userId=${userId}&streamId=${streamId}`)
       if (response.ok) {
         const data = await response.json()
         
@@ -195,8 +210,10 @@ function PaymentPageContent() {
 
   // Show loading while userId is being initialized
   if (userIdLoading) {
+    console.log('🔄 userIdLoading state, showWarningPopup:', showWarningPopup)
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black text-white flex items-center justify-center">
+        <PaymentWarningPopup isOpen={showWarningPopup} onClose={handleWarningClose} />
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
           <p className="text-gray-400">Menyiapkan pembayaran...</p>
@@ -209,8 +226,10 @@ function PaymentPageContent() {
   }
 
   if (loading) {
+    console.log('🔄 loading state, showWarningPopup:', showWarningPopup)
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black text-white flex items-center justify-center">
+        <PaymentWarningPopup isOpen={showWarningPopup} onClose={handleWarningClose} />
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
           <p className="text-gray-400">Loading payment page...</p>
@@ -222,6 +241,7 @@ function PaymentPageContent() {
   if (!stream) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black text-white flex items-center justify-center">
+        <PaymentWarningPopup isOpen={showWarningPopup} onClose={handleWarningClose} />
         <div className="text-center">
           <h1 className="text-2xl font-bold mb-4">Stream tidak ditemukan</h1>
           <Link href="/" className="text-blue-400 hover:text-blue-300">
@@ -236,6 +256,7 @@ function PaymentPageContent() {
   if (alreadyHasAccess) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black text-white flex items-center justify-center">
+        <PaymentWarningPopup isOpen={showWarningPopup} onClose={handleWarningClose} />
         <div className="max-w-md mx-auto text-center p-8 bg-gray-800/50 backdrop-blur-xl rounded-2xl border border-gray-700">
           <div className="mb-6">
             <div className="text-6xl mb-4">👑</div>
@@ -280,6 +301,7 @@ function PaymentPageContent() {
   if (errorMessage) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black text-white flex items-center justify-center">
+        <PaymentWarningPopup isOpen={showWarningPopup} onClose={handleWarningClose} />
         <div className="max-w-md mx-auto text-center p-8 bg-gray-800/50 backdrop-blur-xl rounded-2xl border border-gray-700">
           <div className="mb-6">
             <div className="text-6xl mb-4">❌</div>
@@ -302,6 +324,7 @@ function PaymentPageContent() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black text-white">
+      <PaymentWarningPopup isOpen={showWarningPopup} onClose={handleWarningClose} />
       <div className="max-w-4xl mx-auto p-3">
         {/* Header */}
         <div className="text-center mb-4">
@@ -364,7 +387,7 @@ function PaymentPageContent() {
                 <h3 className="font-semibold text-gray-300 mb-1 text-xs">Detail Stream</h3>
                 <div className="bg-gray-700/50 rounded-lg p-2">
                   <p className="font-semibold text-white mb-1 text-xs">{stream.title}</p>
-                  <p className="text-xs text-gray-400 mb-1">{stream.description}</p>
+                  <p className="text-xs text-gray-400 mb-1"></p>
                   <div className="flex justify-between items-center">
                     <span className="text-xs text-gray-400">Harga:</span>
                     <span className="font-semibold text-green-400 text-xs">{formatPrice(stream.price)}</span>

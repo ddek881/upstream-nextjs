@@ -80,7 +80,7 @@ export default function QRCodeDisplay({
         </h4>
         <ol className="text-slate-300 text-xs space-y-0.5">
           <li>1. Buka aplikasi e-wallet atau mobile banking Anda</li>
-          <li>2. Pilih menu "Scan QRIS" atau "Pay QRIS"</li>
+          <li>2. Pilih menu &quot;Scan QRIS&quot; atau &quot;Pay QRIS&quot;</li>
           <li>3. Scan QR code di atas</li>
           <li>4. Periksa detail pembayaran dan konfirmasi</li>
           <li>5. Masukkan PIN atau password untuk menyelesaikan pembayaran</li>

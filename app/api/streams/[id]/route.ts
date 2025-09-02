@@ -7,7 +7,6 @@ export async function GET(
 ) {
   try {
     const { id } = await context.params
-    
     const stream = await getStreamById(id)
     
     if (!stream) {
@@ -16,12 +15,13 @@ export async function GET(
         { status: 404 }
       )
     }
-
+    
     return NextResponse.json(stream)
+    
   } catch (error) {
     console.error('Error fetching stream:', error)
     return NextResponse.json(
-      { error: 'Failed to fetch stream' },
+      { error: 'Internal server error' },
       { status: 500 }
     )
   }

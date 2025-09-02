@@ -22,41 +22,50 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Generate unique transaction ID
-    const trxId = `UPSTREAM-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-
-    // Create payment record in database
-    const payment = await createPayment(userId, streamId, trxId, amount)
-
-    // Generate QRIS data using external API
-    const qrisResponse = await fetch('https://rest.otomatis.vip/api/generate', {
+    // Generate QRIS data using external API first to get trx_id
+    const qrisUsername = process.env.NEXT_PUBLIC_QRIS_USERNAME || 'upstream_live'
+    const qrisUuid = process.env.NEXT_PUBLIC_QRIS_UUID || '2a27740e-3c41-449d-a6de-4dd35217e2da'
+    const qrisApiUrl = process.env.NEXT_PUBLIC_QRIS_API_URL || 'https://rest.otomatis.vip/api/generate'
+    
+    const qrisResponse = await fetch(qrisApiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        username: 'test',
+        username: qrisUsername,
         amount: amount,
-        uuid: '2a27740e-3c41-449d-a6de-4dd35217e2da',
+        uuid: qrisUuid,
         expire: 1200
       })
     })
 
     if (!qrisResponse.ok) {
+      console.error('QRIS API Error:', qrisResponse.status, qrisResponse.statusText)
+      const errorText = await qrisResponse.text()
+      console.error('QRIS API Response:', errorText)
       return NextResponse.json(
-        { error: 'Gagal generate QRIS dari provider' },
+        { error: `Gagal generate QRIS dari provider (${qrisResponse.status})` },
         { status: 500 }
       )
     }
 
     const qrisData = await qrisResponse.json()
+    console.log('QRIS API Response:', qrisData)
 
-    if (!qrisData.status || !qrisData.data) {
+    if (!qrisData.status || !qrisData.data || !qrisData.trx_id) {
+      console.error('Invalid QRIS response:', qrisData)
       return NextResponse.json(
-        { error: 'Response QRIS tidak valid' },
+        { error: 'Response QRIS tidak valid dari provider' },
         { status: 500 }
       )
     }
+
+    // Use trx_id from QRIS API response
+    const trxId = qrisData.trx_id
+
+    // Create payment record in database with trx_id from QRIS API
+    const payment = await createPayment(userId, streamId, trxId, amount)
 
     // Generate QR code data URL using local library
     const qrCodeDataUrl = await QRCode.toDataURL(qrisData.data, {
@@ -77,7 +86,7 @@ export async function POST(request: NextRequest) {
         amount: amount,
         streamId: streamId,
         userId: userId,
-        expiresAt: payment.expires_at,
+        expiresAt: new Date(payment.expired_at * 1000).toISOString(),
         qrisData: qrisData.data
       }
     })

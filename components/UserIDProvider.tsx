@@ -2,6 +2,15 @@
 
 import { createContext, useContext, useEffect, useState } from 'react'
 
+// Function to generate UUID v4 for database compatibility
+function generateUserID(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0
+    const v = c === 'x' ? r : (r & 0x3 | 0x8)
+    return v.toString(16)
+  })
+}
+
 interface UserIDContextType {
   userId: string | null
   setUserId: (id: string) => void
@@ -23,8 +32,8 @@ export function UserIDProvider({ children }: { children: React.ReactNode }) {
       setUserIdState(storedUserId)
       setIsLoading(false)
     } else {
-      // Generate new user ID
-      const newUserId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      // Generate new user ID as simple string
+      const newUserId = generateUserID()
       localStorage.setItem('currentUserId', newUserId)
       setUserIdState(newUserId)
       setIsLoading(false)

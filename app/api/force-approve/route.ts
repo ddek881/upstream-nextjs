@@ -41,8 +41,7 @@ export async function POST(request: NextRequest) {
           userId: updatedPayment.user_id,
           amount: updatedPayment.amount,
           status: updatedPayment.status,
-          paidAt: updatedPayment.paid_at,
-          expiresAt: updatedPayment.expires_at
+          expiresAt: new Date(updatedPayment.expired_at * 1000).toISOString()
         }
       })
     } else {

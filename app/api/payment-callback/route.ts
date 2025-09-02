@@ -26,10 +26,9 @@ export async function GET(request: NextRequest) {
     }
 
     // Check if payment is expired
-    const now = new Date()
-    const expiresAt = new Date(payment.expires_at)
+    const now = Math.floor(Date.now() / 1000)
     
-    if (now > expiresAt && payment.status === 'pending') {
+    if (now > payment.expired_at && payment.status === 'pending') {
       await updatePaymentStatus(trxId, 'expired')
       payment.status = 'expired'
     }
@@ -48,8 +47,7 @@ export async function GET(request: NextRequest) {
         userId: payment.user_id,
         amount: payment.amount,
         status: payment.status,
-        paidAt: payment.paid_at,
-        expiresAt: payment.expires_at,
+        expiresAt: new Date(payment.expired_at * 1000).toISOString(),
         hasAccess: hasAccess
       }
     })
@@ -93,8 +91,7 @@ export async function POST(request: NextRequest) {
         userId: payment.user_id,
         amount: payment.amount,
         status: payment.status,
-        paidAt: payment.paid_at,
-        expiresAt: payment.expires_at
+        expiresAt: new Date(payment.expired_at * 1000).toISOString()
       }
     })
 
