@@ -296,7 +296,7 @@ export async function hasUserViewed(userId: string, streamId: string): Promise<b
 // Get total view count (stream.view + viewers count)
 export async function getTotalViewCount(streamId: string): Promise<number> {
   // Get stream view count
-  const streamResult = await query('SELECT COALESCE(view, 0) as view FROM streams WHERE id = ?', [streamId])
+  const streamResult = await query('SELECT COALESCE(`view`, 0) as view FROM streams WHERE id = ?', [streamId])
   const streamView = Number((streamResult.rows[0] as { view: number })?.view || 0)
   
   // Get viewers count
@@ -309,7 +309,7 @@ export async function getTotalViewCount(streamId: string): Promise<number> {
 
 // Increment stream view count
 export async function incrementStreamView(streamId: string): Promise<void> {
-  await query('UPDATE streams SET view = COALESCE(view, 0) + 1 WHERE id = ?', [streamId])
+  await query('UPDATE streams SET `view` = COALESCE(`view`, 0) + 1 WHERE id = ?', [streamId])
 }
 
 export default pool

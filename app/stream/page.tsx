@@ -554,15 +554,12 @@ function StreamPageContent() {
     if (!stream?.scheduled_time || Boolean(stream.is_live)) return
 
     const updateCountdown = () => {
-      // Get current time in Indonesian timezone (WIB - UTC+7)
-      const now = new Date()
-      const nowInWIB = new Date(now.getTime() + (7 * 60 * 60 * 1000)) // Add 7 hours for WIB
-      
-      // Parse scheduled time and assume it's in WIB
-      const scheduledTime = new Date(stream.scheduled_time!)
-      const scheduledInWIB = new Date(scheduledTime.getTime())
-      
-      const difference = scheduledInWIB.getTime() - nowInWIB.getTime()
+      const scheduledMs = adjustedIndonesiaEpochMs(stream.scheduled_time!)
+      if (scheduledMs === null) {
+        setCountdown({ days: 0, hours: 0, minutes: 0, seconds: 0 })
+        return
+      }
+      const difference = scheduledMs - Date.now()
 
       if (difference > 0) {
         const days = Math.floor(difference / (1000 * 60 * 60 * 24))
@@ -670,15 +667,57 @@ function StreamPageContent() {
   }
 
   const formatTime = (timeString: string) => {
-    const date = new Date(timeString)
-    return date.toLocaleString('id-ID', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      timeZone: 'Asia/Jakarta'
-    }) + ' WIB'
+    const ms = adjustedIndonesiaEpochMs(timeString)
+    if (ms === null) return timeString
+    const date = new Date(ms)
+    const datePart = new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Jakarta' }).format(date)
+    const timePart = new Intl.DateTimeFormat('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Jakarta' }).format(date).replace(':', '.')
+    return `${datePart} pukul ${timePart} WIB`
+  }
+
+  // Parse scheduled_time to epoch ms. If string has timezone (ISO Z/offset) use it.
+  // Otherwise treat as local wall-clock (no conversion to Indonesia timezone).
+  function parseScheduledToMs(input: string): number | null {
+    if (!input) return null
+    const trimmed = input.trim()
+    // ISO with timezone or Z or milliseconds
+    if (/\dT\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d{2}:?\d{2})$/.test(trimmed)) {
+      const ms = Date.parse(trimmed)
+      return isNaN(ms) ? null : ms
+    }
+    // YYYY-MM-DD[ T]HH:MM[:SS]
+    let m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/.exec(trimmed)
+    if (m) {
+      return new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || '0')).getTime()
+    }
+    // dd/MM/yyyy, HH.mm or HH:mm
+    m = /^(\d{2})\/(\d{2})\/(\d{4}),?\s*(\d{2})[.:](\d{2})$/.exec(trimmed)
+    if (m) {
+      return new Date(+m[3], +m[2] - 1, +m[1], +m[4], +m[5], 0).getTime()
+    }
+    return null
+  }
+
+  // Extract components directly from the input without applying any timezone conversion
+  function extractRawComponents(input: string): { year: number; month: number; day: number; hour: number; minute: number; second: number } | null {
+    if (!input) return null
+    const trimmed = input.trim()
+    let m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/.exec(trimmed)
+    if (m) {
+      return { year: +m[1], month: +m[2], day: +m[3], hour: +m[4], minute: +m[5], second: +(m[6] || '0') }
+    }
+    m = /^(\d{2})\/(\d{2})\/(\d{4}),?\s*(\d{2})[.:](\d{2})$/.exec(trimmed)
+    if (m) {
+      return { year: +m[3], month: +m[2], day: +m[1], hour: +m[4], minute: +m[5], second: 0 }
+    }
+    return null
+  }
+
+  // Convert scheduled_time to epoch, then subtract 7 hours before using (per request)
+  function adjustedIndonesiaEpochMs(input: string): number | null {
+    const base = parseScheduledToMs(input)
+    if (base === null) return null
+    return base - (7 * 60 * 60 * 1000)
   }
 
   return (

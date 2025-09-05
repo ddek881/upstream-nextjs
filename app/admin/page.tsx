@@ -63,12 +63,38 @@ export default function AdminPage() {
         )
       })
     : streams
-  const totalFiltered = filteredStreams.length
+
+  // Sort streams: visible first (by schedule), then hidden at bottom
+  const sortedStreams = [...filteredStreams].sort((a, b) => {
+    // First, separate visible and hidden streams
+    if (a.is_visible !== b.is_visible) {
+      return a.is_visible ? -1 : 1 // visible streams first
+    }
+    
+    // For visible streams, sort by schedule (nearest first)
+    if (a.is_visible && b.is_visible) {
+      // Handle streams without scheduled_time (put them at the end)
+      if (!a.scheduled_time && !b.scheduled_time) {
+        return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+      }
+      if (!a.scheduled_time) return 1
+      if (!b.scheduled_time) return -1
+      
+      // Sort by scheduled_time (nearest first)
+      const timeA = new Date(a.scheduled_time).getTime()
+      const timeB = new Date(b.scheduled_time).getTime()
+      return timeA - timeB
+    }
+    
+    // For hidden streams, sort by creation date (newest first)
+    return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+  })
+  const totalFiltered = sortedStreams.length
   const totalPages = Math.max(Math.ceil(totalFiltered / limit), 1)
   const safePage = Math.min(Math.max(page, 1), totalPages)
   const startIdx = (safePage - 1) * limit
   const endIdx = startIdx + limit
-  const paginatedStreams = filteredStreams.slice(startIdx, endIdx)
+  const paginatedStreams = sortedStreams.slice(startIdx, endIdx)
 
   const handleSaveStream = async (streamData: Partial<Stream>) => {
     try {

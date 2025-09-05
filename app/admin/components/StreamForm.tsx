@@ -101,8 +101,8 @@ export default function StreamForm({ stream, isOpen, onClose, onSave }: StreamFo
         // Ensure numeric values are properly converted
         price: formData.is_paid ? Number(formData.price) || 0 : 0,
         view: Number(formData.view) || 0,
-        // Handle scheduled_time properly
-        scheduled_time: formData.scheduled_time ? new Date(formData.scheduled_time).toISOString() : undefined,
+        // Send raw input for server-side parsing (supports multiple formats)
+        scheduled_time: formData.scheduled_time || undefined,
         // Ensure string values are properly handled
         category: formData.category || 'entertainment',
         // Ensure URL present for update endpoint
@@ -178,7 +178,7 @@ export default function StreamForm({ stream, isOpen, onClose, onSave }: StreamFo
               >
                 <option value="">Pilih Kategori</option>
                 {categories.map((category) => (
-                  <option key={category.id} value={category.name}>
+                  <option key={category.id} value={category.id}>
                     {category.name}
                   </option>
                 ))}

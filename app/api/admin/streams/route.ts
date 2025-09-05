@@ -1,6 +1,43 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/database'
 
+// Ensure required columns exist in the `streams` table (idempotent, runs fast on MySQL 8+)
+async function ensureStreamsColumns(): Promise<void> {
+  try {
+    const desc = await query('DESCRIBE streams')
+    const existing = new Set<string>()
+    for (const row of desc.rows as Array<Record<string, unknown>>) {
+      const field = row['Field']
+      if (typeof field === 'string') existing.add(field)
+    }
+
+    const alters: string[] = []
+    if (!existing.has('category')) alters.push("ALTER TABLE streams ADD COLUMN IF NOT EXISTS category VARCHAR(50) DEFAULT 'entertainment'")
+    if (!existing.has('is_popular')) alters.push('ALTER TABLE streams ADD COLUMN IF NOT EXISTS is_popular BOOLEAN DEFAULT FALSE')
+    if (!existing.has('chat_live')) alters.push('ALTER TABLE streams ADD COLUMN IF NOT EXISTS chat_live TEXT')
+    if (!existing.has('chat_nolive')) alters.push('ALTER TABLE streams ADD COLUMN IF NOT EXISTS chat_nolive TEXT')
+    if (!existing.has('view')) alters.push('ALTER TABLE streams ADD COLUMN IF NOT EXISTS `view` INT DEFAULT 0')
+    if (!existing.has('estimated_duration')) alters.push('ALTER TABLE streams ADD COLUMN IF NOT EXISTS estimated_duration VARCHAR(255) NULL')
+    if (!existing.has('scheduled_time')) alters.push('ALTER TABLE streams ADD COLUMN IF NOT EXISTS scheduled_time DATETIME NULL')
+
+    for (const sql of alters) {
+      await query(sql)
+    }
+  } catch (e) {
+    // Log and continue; missing privileges or older MySQL may skip this
+    console.error('ensureStreamsColumns error:', e)
+  }
+}
+
+async function resolveCategoryId(rawCategory: unknown): Promise<string | null> {
+  if (!rawCategory || typeof rawCategory !== 'string') return null
+  const trimmed = rawCategory.trim()
+  if (!trimmed) return null
+  const result = await query('SELECT id FROM categories WHERE id = ? OR name = ? LIMIT 1', [trimmed, trimmed])
+  const row = (result.rows[0] as { id?: string } | undefined)
+  return row?.id ?? null
+}
+
 // Coerce various truthy/falsey inputs (0/1, '0'/'1', true/false, 'true'/'false')
 function toBoolean(value: unknown): boolean {
   if (typeof value === 'boolean') return value
@@ -28,7 +65,7 @@ function toMySqlDatetime(input: unknown): string | null {
     // Matches dd/MM/yyyy, HH.mm or dd/MM/yyyy, HH:mm
     const idMatch = /^(\d{2})\/(\d{2})\/(\d{4}),?\s*(\d{2})[.:](\d{2})$/.exec(trimmed)
     if (idMatch) {
-      const [_, dd, mm, yyyy, HH, MM] = idMatch
+      const [, dd, mm, yyyy, HH, MM] = idMatch
       return `${yyyy}-${mm}-${dd} ${HH}:${MM}:00`
     }
     // Try native Date parsing (ISO etc.)
@@ -86,6 +123,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    await ensureStreamsColumns()
     const body = await request.json()
     console.log('API received body:', body)
     console.log('Description received:', body.description)
@@ -95,7 +133,7 @@ export async function POST(request: NextRequest) {
       description,
       thumbnail,
       url,
-      category = 'entertainment',
+      category = '',
       is_live = false,
       is_paid = false,
       is_visible = true,
@@ -145,6 +183,15 @@ export async function POST(request: NextRequest) {
     // Use default URL if not provided
     const finalUrl = url || 'https://stream.trcell.id/hls/byon2.m3u8'
 
+    // Resolve category to ID (accepts id or name). If provided but not found, reject.
+    const categoryId = await resolveCategoryId(category)
+    if (category && !categoryId) {
+      return NextResponse.json(
+        { error: 'Category not found' },
+        { status: 400 }
+      )
+    }
+
     // Generate UUID for new stream
     const streamId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
     
@@ -156,10 +203,10 @@ export async function POST(request: NextRequest) {
       `INSERT INTO streams (
         id, title, description, thumbnail, url, category,
         is_live, is_paid, is_visible, is_popular, price, 
-        scheduled_time, estimated_duration, chat_live, chat_nolive, view
+        scheduled_time, estimated_duration, chat_live, chat_nolive, \`view\`
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        streamId, title, description, thumbnail, finalUrl, category,
+        streamId, title, description, thumbnail, finalUrl, categoryId,
         isLive, isPaid, isVisible, isPopular, Number(price) || 0,
         finalScheduledTime, estimated_duration || null, chat_live || '', chat_nolive || '', Number(view) || 0
       ]
@@ -173,7 +220,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Error creating stream:', error)
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Internal server error', message: error instanceof Error ? error.message : String(error) },
       { status: 500 }
     )
   }
@@ -181,6 +228,7 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
+    await ensureStreamsColumns()
     const body = await request.json()
     
     const {
@@ -189,7 +237,7 @@ export async function PUT(request: NextRequest) {
       description,
       thumbnail,
       url,
-      category = 'entertainment',
+      category = '',
       is_live = false,
       is_paid = false,
       is_visible = true,
@@ -214,6 +262,15 @@ export async function PUT(request: NextRequest) {
 
     // Default URL on update if missing/empty
     const finalUrl = url || 'https://stream.trcell.id/hls/byon2.m3u8'
+
+    // Resolve category to ID (accepts id or name)
+    const categoryId = await resolveCategoryId(category)
+    if (category && !categoryId) {
+      return NextResponse.json(
+        { error: 'Category not found' },
+        { status: 400 }
+      )
+    }
 
     // Validate required fields
     if (!id || !title || !description || !thumbnail || !finalUrl) {
@@ -246,10 +303,10 @@ export async function PUT(request: NextRequest) {
       `UPDATE streams SET 
         title = ?, description = ?, thumbnail = ?, url = ?, category = ?,
         is_live = ?, is_paid = ?, is_visible = ?, is_popular = ?, price = ?,
-        scheduled_time = ?, estimated_duration = ?, chat_live = ?, chat_nolive = ?, view = ?, updated_at = NOW()
+        scheduled_time = ?, estimated_duration = ?, chat_live = ?, chat_nolive = ?, \`view\` = ?, updated_at = NOW()
       WHERE id = ?`,
       [
-        title, description, thumbnail, finalUrl, category,
+        title, description, thumbnail, finalUrl, categoryId,
         isLive, isPaid, isVisible, isPopular, Number(price) || 0,
         finalScheduledTime, estimated_duration || null, chat_live || '', chat_nolive || '', Number(view) || 0, id
       ]
@@ -270,7 +327,7 @@ export async function PUT(request: NextRequest) {
   } catch (error) {
     console.error('Error updating stream:', error)
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Internal server error', message: error instanceof Error ? error.message : String(error) },
       { status: 500 }
     )
   }

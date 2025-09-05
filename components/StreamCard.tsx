@@ -115,15 +115,9 @@ export default function StreamCard({ stream }: StreamCardProps) {
 
   // Function to format scheduled countdown with detailed Indonesian time
   const formatScheduledCountdown = (scheduledTime: string): string => {
-    // Get current time in Indonesian timezone (WIB - UTC+7)
-    const now = new Date()
-    const nowInWIB = new Date(now.getTime() + (7 * 60 * 60 * 1000)) // Add 7 hours for WIB
-    
-    // Parse scheduled time and assume it's in WIB
-    const scheduledDate = new Date(scheduledTime)
-    const scheduledInWIB = new Date(scheduledDate.getTime())
-    
-    const diff = scheduledInWIB.getTime() - nowInWIB.getTime()
+    const scheduledMs = adjustedIndonesiaEpochMs(scheduledTime)
+    if (scheduledMs === null) return 'Segera hadir'
+    const diff = scheduledMs - Date.now()
     
     if (diff <= 0) {
       return 'Sedang Live'
@@ -160,6 +154,57 @@ export default function StreamCard({ stream }: StreamCardProps) {
     }
   }
 
+  // Format label: "3 September 2025 pukul 01.09 WIB"
+  const formatScheduledLabel = (scheduledTime: string): string => {
+    const ms = adjustedIndonesiaEpochMs(scheduledTime)
+    if (ms === null) return scheduledTime
+    const date = new Date(ms)
+    const id = new Intl.DateTimeFormat('id-ID', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Jakarta' }).format(date)
+    const time = new Intl.DateTimeFormat('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Jakarta' }).format(date).replace(':', '.')
+    return `${id} pukul ${time} WIB`
+  }
+
+  // Unified parser supporting ISO with Z/offset, DB naive, and dd/MM/yyyy
+  function parseScheduledToMs(input: string): number | null {
+    if (!input) return null
+    const trimmed = input.trim()
+    if (/\dT\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d{2}:?\d{2})$/.test(trimmed)) {
+      const ms = Date.parse(trimmed)
+      return isNaN(ms) ? null : ms
+    }
+    let m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/.exec(trimmed)
+    if (m) {
+      return new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || '0')).getTime()
+    }
+    m = /^(\d{2})\/(\d{2})\/(\d{4}),?\s*(\d{2})[.:](\d{2})$/.exec(trimmed)
+    if (m) {
+      return new Date(+m[3], +m[2] - 1, +m[1], +m[4], +m[5], 0).getTime()
+    }
+    return null
+  }
+
+  // Extract components without applying timezone conversion
+  function extractRawComponents(input: string): { year: number; month: number; day: number; hour: number; minute: number; second: number } | null {
+    if (!input) return null
+    const trimmed = input.trim()
+    let m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/.exec(trimmed)
+    if (m) {
+      return { year: +m[1], month: +m[2], day: +m[3], hour: +m[4], minute: +m[5], second: +(m[6] || '0') }
+    }
+    m = /^(\d{2})\/(\d{2})\/(\d{4}),?\s*(\d{2})[.:](\d{2})$/.exec(trimmed)
+    if (m) {
+      return { year: +m[3], month: +m[2], day: +m[1], hour: +m[4], minute: +m[5], second: 0 }
+    }
+    return null
+  }
+
+  // Per request: kurangi 7 jam sebelum format/hitung agar match WIB
+  function adjustedIndonesiaEpochMs(input: string): number | null {
+    const base = parseScheduledToMs(input)
+    if (base === null) return null
+    return base - (7 * 60 * 60 * 1000)
+  }
+
   // Start scheduled countdown
   const startScheduledCountdown = useCallback(() => {
     if (!stream.scheduled_time || Boolean(stream.is_live)) return
@@ -170,10 +215,8 @@ export default function StreamCard({ stream }: StreamCardProps) {
       
       // If countdown reaches 0, clear interval
       const now = new Date()
-      const nowInWIB = new Date(now.getTime() + (7 * 60 * 60 * 1000)) // Add 7 hours for WIB
       const scheduledDate = new Date(stream.scheduled_time!)
-      const scheduledInWIB = new Date(scheduledDate.getTime())
-      if (scheduledInWIB.getTime() <= nowInWIB.getTime()) {
+      if (scheduledDate.getTime() <= now.getTime()) {
         if (scheduledCountdownRef.current) {
           clearInterval(scheduledCountdownRef.current)
           scheduledCountdownRef.current = null
@@ -584,12 +627,7 @@ export default function StreamCard({ stream }: StreamCardProps) {
             {!Boolean(stream.is_live) && Boolean(stream.scheduled_time) && Boolean(scheduledCountdown) && scheduledCountdown !== '00' && scheduledCountdown !== '0' && (
               <div className="flex flex-col bg-blue-500/10 px-2 py-1.5 rounded-lg border border-blue-500/20">
                 <span className="text-xs text-slate-300 font-medium">
-                  {new Date(stream.scheduled_time!).toLocaleDateString('id-ID', {
-                    day: 'numeric',
-                    month: 'long',
-                    year: 'numeric',
-                    timeZone: 'Asia/Jakarta'
-                  })}
+                  {formatScheduledLabel(stream.scheduled_time!)}
                 </span>
                 <span className="text-xs text-blue-400 font-bold">
                   {scheduledCountdown}
